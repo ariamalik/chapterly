@@ -1,0 +1,96 @@
+# chapterly — sandbox dev environment.
+#
+# Runs the app from the cloned source with a live-reloading dev server, plus a
+# local PostgreSQL. Nothing here is production configuration.
+
+name: chapterly
+
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: chapterly
+      POSTGRES_PASSWORD: chapterly
+      POSTGRES_DB: chapterly
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U chapterly -d chapterly"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    restart: on-failure
+    labels:
+      base44.project: chapterly
+      base44.kind: infra
+
+  # One-shot: applies the schema and the demo content, then exits.
+  db-setup:
+    image: postgres:16
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./db:/db:ro
+    environment:
+      PGHOST: db
+      PGUSER: chapterly
+      PGPASSWORD: chapterly
+      PGDATABASE: chapterly
+    command:
+      - sh
+      - -ec
+      - psql -v ON_ERROR_STOP=1 -f /db/schema.sql && psql -v ON_ERROR_STOP=1 -f /db/seed.sql
+    restart: "no"
+    labels:
+      base44.project: chapterly
+      base44.kind: infra
+
+  web:
+    image: node:22
+    working_dir: /app
+    depends_on:
+      db:
+        condition: service_healthy
+      db-setup:
+        condition: service_completed_successfully
+    volumes:
+      - ./:/app
+      - web_node_modules:/app/node_modules
+      - web_next:/app/.next
+      - web_npm_cache:/root/.npm
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgresql://chapterly:chapterly@db:5432/chapterly
+      # Passed through from the sandbox environment; read by next.config.mjs to
+      # allow the preview proxy's origin. Empty outside the sandbox.
+      BASE44_PREVIEW_MODE:
+      BASE44_PUBLIC_HOST_SUFFIX:
+      BASE44_SANDBOX_HOST_DOMAIN:
+      # Bind mounts need polling for file watching in dev.
+      WATCHPACK_POLLING: "true"
+      CHOKIDAR_USEPOLLING: "true"
+      NEXT_TELEMETRY_DISABLED: "1"
+    command:
+      - sh
+      - -ec
+      - npm ci --no-audit --no-fund && exec npm run dev
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:3000/').then(r => { if (!r.ok) process.exit(1); process.exit(0); }).catch(() => process.exit(1))\""]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    restart: on-failure
+    labels:
+      base44.project: chapterly
+      base44.kind: web
+      base44.port: "3000"
+
+volumes:
+  db_data:
+  web_node_modules:
+  web_next:
+  web_npm_cache:

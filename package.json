@@ -1,0 +1,17 @@
+{
+  "name": "chapterly",
+  "version": "0.1.0",
+  "private": true,
+  "description": "chapterly — a publishing app for serialized stories",
+  "scripts": {
+    "dev": "next dev -H 0.0.0.0 -p 3000",
+    "build": "next build",
+    "start": "next start -H 0.0.0.0 -p 3000"
+  },
+  "dependencies": {
+    "next": "^15.1.6",
+    "pg": "^8.13.1",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  }
+}
